@@ -1,9 +1,41 @@
 ---
 
-- name: Example task to deploy a template
-  ansible.builtin.template:
-    src: 'potos.example.j2'
-    dest: '/potos.example'
+- name: Get os specific facts
+  ansible.builtin.include_vars: '{{ item }}'
+  with_first_found:
+    - '{{ ansible_distribution }}_{{ ansible_distribution_major_version }}.yml'
+    - '{{ ansible_distribution }}.yml'
+    - '{{ ansible_os_family }}.yml'
+
+- name: Install sudoers file
+  ansible.builtin.copy:
+    src: 'sudo/{{ potos_sudo_config }}'
+    dest: '/etc/sudoers'
     owner: root
     group: root
-    mode: '0755'
+    mode: '0440'
+  when: potos_sudo_config is defined
+
+- name: Ensure /etc/sudoers.d exists
+  ansible.builtin.file:
+    path: '/etc/sudoers.d'
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+  when: potos_sudo_rules is defined
+
+- name: Install sudo rules
+  ansible.builtin.copy:
+    src: 'sudo/rules/{{ item }}'
+    dest: '/etc/sudoers.d/{{ item | basename }}'
+    owner: root
+    group: root
+    mode: '0644'
+  loop: '{{ potos_sudo_rules[1:] | default([]) }}'
+  when:
+    - potos_sudo_config is defined
+    - potos_sudo_rules is defined
+    - potos_sudo_rules is iterable
+    - potos_sudo_rules is not string
+    - (potos_sudo_rules | length > 0)
